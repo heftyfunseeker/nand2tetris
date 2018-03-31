@@ -39,17 +39,46 @@ CHIP CPU {
         pc[15];          // address of next instruction
 
     PARTS:
-    // Put your code here:
-	//ARegister( out = outA);
-	//DRegister
+	// if it's an A instruction we can't interpret the jmp and dest bits the same
+	And(a = instruction[3], b = true, out = writeM);
+	And(a = instruction[4], b = true, out = loadRegD);
+	And(a = instruction[5], b = true, out = loadRegA);
 	
-	// check alu zr and ng outputs with j bits to see if we assert load bit
-	ALU(... zr = zr, ng = ng);
+	// A register
+	Mux16(a = instruction, b = outALU, sel = instruction[15], out = inRegA);
+	ARegister(in = inRegA, load = loadRegA, out = outRegA, out[0..14] = addressM);
 	
-	jbits instruction[0..2];
-	// > 0
-	// < 0
-	// == 0
-	And()
-	PC(in = outA, reset = reset, inc = true)
+	Mux16(a = outRegA, b = inM, sel = instruction[12], out = inALU1);
+	
+	// D register
+	DRegister(in = outALU, load = loadRegD, out = inALU0);
+	
+	// ALU
+	ALU(
+		x = inALU0,
+		y = inALU1,
+		zx = instruction[11],
+		nx = instruction[10],
+		zy = instruction[9],
+		ny = instruction[8],
+		f = instruction[7],
+		no = instruction[6],
+		zr = zr,
+		ng = ng,
+		out = outALU,
+		out = outM
+	);
+	
+	// determine jmp for pc
+	// @nicco: this can be just a few mux statements?
+	Not(in = zr, out = nZR);
+	Not(in = ng, out = nNG);
+	And(a = nNG, b = nZR, out = gr);
+	And(a = gr, b = instruction[0], out = loadPCgr);
+	And(a = zr, b = instruction[1], out = loadPCzr);
+	And(a = ng, b = instruction[2], out = loadPCng);
+	Or(a = loadPCgr, b = loadPCzr, out = loadPC0);
+	Or(a = loadPC0, b = loadPCng, out = loadPC);
+	
+	PC(in = outRegA, load = loadPC, inc = true, reset = reset, out[0..14] = pc);
 }
