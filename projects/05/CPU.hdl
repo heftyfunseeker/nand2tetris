@@ -27,33 +27,30 @@
 
 CHIP CPU {
 
-    IN  inM[16],         // M value input  (M = contents of RAM[A])
-        instruction[16], // Instruction for execution
-        reset;           // Signals whether to re-start the current
-                         // program (reset==1) or continue executing
-                         // the current program (reset==0).
+	IN  inM[16],         // M value input  (M = contents of RAM[A])
+		instruction[16], // Instruction for execution
+		reset;           // Signals whether to re-start the current
+						 // program (reset==1) or continue executing
+						 // the current program (reset==0).
 
-    OUT outM[16],        // M value output
-        writeM,          // Write to M? 
-        addressM[15],    // Address in data memory (of M)
-        pc[15];          // address of next instruction
+	OUT outM[16],        // M value output
+		writeM,          // Write to M? 
+		addressM[15],    // Address in data memory (of M)
+		pc[15];          // address of next instruction
 
-    PARTS:
-	// if it's an A instruction we can't interpret the jmp and dest bits the same
-	And(a = instruction[3], b = true, out = writeM);
-	And(a = instruction[4], b = true, out = loadRegD);
-	And(a = instruction[5], b = true, out = loadRegA);
+	PARTS:
+	And(a = instruction[3], b = instruction[15], out = writeM);
+	And(a = instruction[4], b = instruction[15], out = loadRegD);
+	Not(in = instruction[15], out = isAInstruction);
+	Or(a = instruction[5], b = isAInstruction, out = loadRegA);
 	
-	// A register
 	Mux16(a = instruction, b = outALU, sel = instruction[15], out = inRegA);
 	ARegister(in = inRegA, load = loadRegA, out = outRegA, out[0..14] = addressM);
 	
 	Mux16(a = outRegA, b = inM, sel = instruction[12], out = inALU1);
 	
-	// D register
 	DRegister(in = outALU, load = loadRegD, out = inALU0);
 	
-	// ALU
 	ALU(
 		x = inALU0,
 		y = inALU1,
@@ -70,7 +67,6 @@ CHIP CPU {
 	);
 	
 	// determine jmp for pc
-	// @nicco: this can be just a few mux statements?
 	Not(in = zr, out = nZR);
 	Not(in = ng, out = nNG);
 	And(a = nNG, b = nZR, out = gr);
@@ -78,7 +74,8 @@ CHIP CPU {
 	And(a = zr, b = instruction[1], out = loadPCzr);
 	And(a = ng, b = instruction[2], out = loadPCng);
 	Or(a = loadPCgr, b = loadPCzr, out = loadPC0);
-	Or(a = loadPC0, b = loadPCng, out = loadPC);
+	Or(a = loadPC0, b = loadPCng, out = loadPC1);
+	And(a = instruction[15], b = loadPC1, out = loadPC);
 	
 	PC(in = outRegA, load = loadPC, inc = true, reset = reset, out[0..14] = pc);
 }
